@@ -1,11 +1,11 @@
 package multi.gameproject.ui;
 
 import multi.gameproject.logic.GameController;
-import multi.gameproject.object.BulletObject;
-import multi.gameproject.object.GameObject;
+import multi.gameproject.object.*;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 import java.awt.event.*;
 
 public class GameView extends JFrame {
@@ -25,6 +25,7 @@ public class GameView extends JFrame {
 
     private JTextArea leftTextArea;
     private JTextArea rightTextArea;
+    private JTextArea centerTextArea;
     private JLayeredPane layeredPane;
 
     private int rightTextAreaWidth;
@@ -33,11 +34,38 @@ public class GameView extends JFrame {
     private int scorePanelWidth;
     private int scorePanelHeight;
 
+    private int cols;
+    private int rows;
+
+    private StringBuilder centerContent;
+
+    private int enemySpeed = 500;
+    private Timer gameTimer;
+    private Timer enemyTimer;
+    private Timer bulletTimer;
+
+
     private GameController gameController;
 
     public GameView(GameController gameController) {
         this.gameController = gameController;
         createFrame();
+
+        gameTimer = new Timer(60, e -> fillCenterTextArea(centerTextArea.getWidth(), centerTextArea.getHeight(), centerTextArea));
+
+        enemyTimer = new Timer(enemySpeed, e -> updateEnemies());
+
+        bulletTimer = new Timer(100, new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                updateBullets();
+                updateEnemyBullets();
+            }
+        });
+
+        gameTimer.start();
+        enemyTimer.start();
+        bulletTimer.start();
     }
 
     private void createFrame() {
@@ -50,12 +78,15 @@ public class GameView extends JFrame {
 
         leftTextArea = createTextArea();
         rightTextArea = createTextArea();
+        centerTextArea = createTextArea();
+
         centerPanel = createCenterPanel();
 
         setTextAreaSize();
 
         createJLayeredPanel();
 
+        centerPanel.add(centerTextArea, BorderLayout.CENTER);
         add(leftTextArea, BorderLayout.WEST);
         add(centerPanel, BorderLayout.CENTER);
         add(layeredPane, BorderLayout.EAST);
@@ -65,13 +96,7 @@ public class GameView extends JFrame {
         centerPanel.requestFocusInWindow();
 
         setVisible(true);
-
-        addComponentListener(new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                updatePanels();
-            }
-        });
+        updatePanels();
     }
 
     private void createJLayeredPanel() {
@@ -99,22 +124,7 @@ public class GameView extends JFrame {
     }
 
     private JPanel createCenterPanel() {
-        centerPanel = new JPanel() {
-            @Override
-            public void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                GameObject player = gameController.getPlayer();
-                drawGameObject(g, player);
-
-                GameObject[] enemies = setEnemiesPosition();
-                for (GameObject enemy : enemies) {
-                    drawGameObject(g, enemy);
-                }
-                for (BulletObject bullet : gameController.getBullets()) {
-                    drawGameObject(g, bullet);
-                }
-            }
-        };
+        centerPanel = new JPanel(new BorderLayout());
         centerPanel.setBackground(Color.WHITE);
         centerPanel.setFocusable(true);
         setKeyBinding(centerPanel);
@@ -122,22 +132,17 @@ public class GameView extends JFrame {
             @Override
             public void keyReleased(KeyEvent e) {
                 gameController.keyReleased(e);
+                updatePanels();
+            }
+
+            @Override
+            public void keyPressed(KeyEvent e) {
+                gameController.handlePlayerMovement(e.getKeyCode(), cols, rows);
+                updatePanels();
             }
         });
 
-
         return centerPanel;
-    }
-
-    private void drawGameObject(Graphics g, GameObject gameObject) {
-        if (gameObject != null) {
-            int objectWidth = getObjectWidth(gameObject);
-            int objectHeight = getObjectHeight();
-
-            gameObject.setWidth(objectWidth);
-            gameObject.setHeight(objectHeight);
-            g.drawString(gameObject.getImage(), gameObject.getPosX(), gameObject.getPosY() + objectHeight);
-        }
     }
 
     private JPanel createScorePanel() {
@@ -146,23 +151,16 @@ public class GameView extends JFrame {
         scorePanel.setBackground(Color.WHITE);
         scorePanel.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
 
-        int scores = 0;
-
-        JLabel scoreLabel = new JLabel("SCORE: " + scores);
+        JLabel scoreLabel = new JLabel("SCORE: " + gameController.getScore());
         scoreLabel.setFont(new Font("Consolas", Font.PLAIN, 18));
         scorePanel.add(scoreLabel);
 
         return scorePanel;
     }
 
-    public int getObjectWidth(GameObject gameObject) {
-        FontMetrics fm = getGraphics().getFontMetrics();
-        return fm.stringWidth(gameObject.getImage());
-    }
-
-    public int getObjectHeight() {
-        FontMetrics fm = getGraphics().getFontMetrics();
-        return fm.getHeight();
+    private void updateScore() {
+        JLabel scoreLabel = (JLabel) scorePanel.getComponent(0);
+        scoreLabel.setText("SCORE: " + gameController.getScore());
     }
 
     private void bindingKey(InputMap inputMap, ActionMap actionMap, int keyCode) {
@@ -172,8 +170,7 @@ public class GameView extends JFrame {
         actionMap.put(String.valueOf(keyCode), new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                gameController.handlePlayerMovement(keyCode, centerPanel.getWidth(), centerPanel.getHeight());
-                centerPanel.repaint();
+                gameController.handlePlayerMovement(keyCode, centerTextArea.getWidth(), centerTextArea.getHeight());
             }
         });
     }
@@ -194,9 +191,9 @@ public class GameView extends JFrame {
         rightTextAreaWidth = (int) (getWidth() * RIGHT_TEXT_AREA_RATIO);
         centerTextAreaWidth = (int) (getWidth() * CENTER_TEXT_AREA_RATIO);
 
-        leftTextArea.setPreferredSize(new Dimension(leftTextAreaWidth, getHeight()));
-        rightTextArea.setPreferredSize(new Dimension(rightTextAreaWidth, getHeight()));
-        centerPanel.setPreferredSize(new Dimension(centerTextAreaWidth, getHeight()));
+        leftTextArea.setPreferredSize(new Dimension(leftTextAreaWidth, FRAME_HEIGHT_SIZE));
+        rightTextArea.setPreferredSize(new Dimension(rightTextAreaWidth, FRAME_HEIGHT_SIZE));
+        centerPanel.setPreferredSize(new Dimension(centerTextAreaWidth, FRAME_HEIGHT_SIZE));
 
         scorePanelWidth = (int) (rightTextArea.getWidth() * SCORE_PANEL_WIDTH_RATIO);
         scorePanelHeight = (int) (rightTextArea.getHeight() * SCORE_PANEL_HEIGHT_RATIO);
@@ -209,24 +206,161 @@ public class GameView extends JFrame {
 
         scorePanel.setBounds(SCORE_PANEL_X_OFFSET, SCORE_PANEL_Y_OFFSET, scorePanelWidth, scorePanelHeight);
 
-        fillTextArea(leftTextArea.getWidth(), leftTextArea.getHeight(), leftTextArea);
-        fillTextArea(rightTextArea.getWidth(), rightTextArea.getHeight(), rightTextArea);
+        fillSideTextArea(leftTextArea.getWidth(), leftTextArea.getHeight(), leftTextArea);
+        fillSideTextArea(rightTextArea.getWidth(), rightTextArea.getHeight(), rightTextArea);
+        fillCenterTextArea(centerTextArea.getWidth(), centerTextArea.getHeight(), centerTextArea);
     }
 
-    private void fillTextArea(int panelWidth, int panelHeight, JTextArea textArea) {
+    private void SetColsAndRows(int panelWidth, int panelHeight, JTextArea textArea) {
         FontMetrics fontMetrics = textArea.getFontMetrics(textArea.getFont());
         int charWidth = fontMetrics.charWidth('A');
         int charHeight = fontMetrics.getHeight();
 
-        int cols = panelWidth / charWidth;
-        int rows = panelHeight / charHeight;
+        cols = panelWidth / charWidth;
+        rows = panelHeight / charHeight;
+    }
 
-        StringBuilder content = getStringBuilder(textArea, rows, cols);
+    private void fillSideTextArea(int panelWidth, int panelHeight, JTextArea textArea) {
+        SetColsAndRows(panelWidth, panelHeight, textArea);
+
+        StringBuilder content = getStringDecoration(textArea, rows, cols);
 
         textArea.setText(content.toString());
     }
 
-    private StringBuilder getStringBuilder(JTextArea textArea, int rows, int cols) {
+    private void fillCenterTextArea(int panelWidth, int panelHeight, JTextArea textArea) {
+        SetColsAndRows(panelWidth, panelHeight, textArea);
+
+        centerContent = new StringBuilder(rows * cols);
+        for (int i = 0; i < rows * cols; i++) {
+            centerContent.append(" ");
+        }
+
+        drawPlayer(centerContent, cols);
+        drawBullets(centerContent, cols);
+        drawEnemies(centerContent, cols);
+        drawEnemyBullets(centerContent, cols);
+
+        if (!gameController.getGameStatus()) {
+            stopGame();
+            displayAgainMessage(centerContent, "loss");
+        } else if (gameController.getEnemies().isEmpty()) {
+            stopGame();
+            displayAgainMessage(centerContent, "win");
+        }
+
+        for (int i = 0; i < rows; i++) {
+            centerContent.append(centerContent, i * cols, (i + 1) * cols).append("\n");
+        }
+        textArea.setText(centerContent.toString());
+    }
+
+    private void drawPlayer(StringBuilder content, int cols) {
+        GameObject player = gameController.getPlayer();
+        int startPosition = player.getPosY() * cols + player.getPosX();
+        if (startPosition + player.getImage().length() <= content.length()) {
+            content.replace(startPosition, startPosition + player.getImage().length(), player.getImage());
+        }
+    }
+
+    private void drawBullets(StringBuilder content, int cols) {
+        List<BulletObject> bullets = gameController.getBullets();
+
+        for (int i = bullets.size() - 1; i >= 0; i--) {
+            BulletObject bullet = bullets.get(i);
+            int bulletPos = bullet.getPosY() * cols + bullet.getPosX();
+
+            if (bulletPos >= 0 && bulletPos < content.length()) {
+                content.replace(bulletPos, bulletPos + bullet.getImage().length(), bullet.getImage());
+            }
+        }
+    }
+
+    private void drawEnemyBullets(StringBuilder content, int cols) {
+        List<EnemyBulletObject> enemyBullets = gameController.getEnemyBullet();
+
+        for (int i = enemyBullets.size() - 1; i >= 0; i--) {
+            EnemyBulletObject enemyBullet = enemyBullets.get(i);
+            int enemyBulletPos = enemyBullet.getPosY() * cols + enemyBullet.getPosX();
+
+            if (enemyBulletPos >= 0 && enemyBulletPos < content.length()) {
+                content.replace(enemyBulletPos, enemyBulletPos + enemyBullet.getImage().length(), enemyBullet.getImage());
+            }
+        }
+    }
+
+    private void drawEnemies(StringBuilder content, int cols) {
+        List<EnemyObject> enemies = gameController.getEnemies();
+
+        for (int i = enemies.size() - 1; i >= 0; i--) {
+            EnemyObject enemy = enemies.get(i);
+            int enemyPos = enemy.getPosY() * cols + enemy.getPosX();
+
+            if (enemyPos >= 0 && enemyPos < content.length()) {
+                content.replace(enemyPos, enemyPos + enemy.getImage().length(), enemy.getImage());
+            }
+        }
+    }
+
+    private void updateEnemyBullets() {
+        gameController.shootEnemyBullet();
+        gameController.moveEnemyBullets(rows);
+    }
+
+    private void updateEnemies() {
+        boolean changeRows = gameController.moveEnemies(cols, enemySpeed);
+        if (changeRows) {
+            updateEnemySpeed();
+        }
+    }
+
+    private void updateEnemySpeed() {
+        enemySpeed = gameController.getEnemySpeed();
+        enemyTimer.setDelay(enemySpeed);
+    }
+
+    private void updateBullets() {
+        gameController.moveBullets();
+        updateScore();
+    }
+
+    private void displayAgainMessage(StringBuilder content, String result) {
+        String[] message = {
+                "╔═════════════════════════╗",
+                result.equals("win") ? "║        You Win!!        ║" : "║        You Lose!!       ║",
+                "║                         ║",
+                "║    Play Again?(Y / N)   ║",
+                "╚═════════════════════════╝"
+        };
+        int msgPosY = 10;
+        int msgPosX = 19;
+        for (int i = 0; i < message.length; i++) {
+            int msgStartPos = (msgPosY + i) * cols + msgPosX;
+            content.replace(msgStartPos, msgStartPos + message[i].length(), message[i]);
+        }
+
+        centerTextArea.setFocusable(true);
+        centerTextArea.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                char keyChar = Character.toLowerCase(e.getKeyChar());
+                if (keyChar == 'y') {
+                    resetGame();
+                } else if (keyChar == 'n') {
+                    System.exit(0);
+                }
+            }
+        });
+        centerTextArea.requestFocusInWindow();
+    }
+
+    private void stopGame() {
+        enemyTimer.stop();
+        bulletTimer.stop();
+        gameTimer.stop();
+    }
+
+    private StringBuilder getStringDecoration(JTextArea textArea, int rows, int cols) {
         int hashtagSpace = 1;
         StringBuilder content = new StringBuilder(rows * cols);
 
@@ -261,13 +395,15 @@ public class GameView extends JFrame {
         return content;
     }
 
-    public GameObject[] setEnemiesPosition() {
-        int enemyCount = 8;
-
-        int enemyStartX = (int) (centerPanel.getWidth() * 0.2);
-        int enemyStartY = (int) (centerPanel.getHeight() * 0.2);
-        GameObject[] enemies = gameController.spawnEnemies(enemyCount, enemyStartX, enemyStartY);
-
-        return enemies;
+    private void resetGame() {
+        gameController.resetObject();
+        gameController.spawnEnemies();
+        enemySpeed = 500;
+        enemyTimer.setDelay(enemySpeed);
+        centerTextArea.removeKeyListener(centerTextArea.getKeyListeners()[0]);
+        centerTextArea.setFocusable(false);
+        gameTimer.restart();
+        enemyTimer.restart();
+        bulletTimer.restart();
     }
 }
