@@ -1,12 +1,13 @@
 package multi.gameproject.object;
 
+import java.awt.*;
+
 public class BulletObject extends GameObject {
-    public BulletObject(int posX, int posY) {
-        super(posX, posY, "!");
+    public BulletObject(int posX, int posY, Image image) {
+        super(posX, posY, image );
     }
 
-    @Override
-    public void move(int dx, int dy) {
-        super.move(dx, dy);
+    public void bulletSpeed(int dy) {
+        this.posY += dy;
     }
 }

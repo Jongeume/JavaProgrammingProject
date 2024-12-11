@@ -1,11 +1,14 @@
 package multi.gameproject.object;
 
+import java.awt.*;
+
 public abstract class GameObject {
     protected int posX;
     protected int posY;
-    protected String image;
+    protected Image image;
+    protected boolean isDead = false;
 
-    public GameObject(int posX, int posY, String image) {
+    public GameObject(int posX, int posY, Image image) {
         this.posX = posX;
         this.posY = posY;
         this.image = image;
@@ -19,12 +22,20 @@ public abstract class GameObject {
         return posY;
     }
 
-    public String getImage() {
+    public Image getImage() {
         return image;
     }
 
-    public void move(int dx, int dy) {
-        this.posX += dx;
-        this.posY += dy;
+    public void changeImage(Image image){
+        this.image = image;
     }
+
+    public boolean checkIsDead() {
+        return isDead;
+    }
+
+    public void setDead(boolean dead) {
+        isDead = dead;
+    }
+
 }

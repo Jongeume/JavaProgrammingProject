@@ -1,12 +1,17 @@
 package multi.gameproject.object;
 
+import java.awt.*;
+
 public class EnemyObject extends GameObject {
-    public EnemyObject(int posX, int posY) {
-        super(posX, posY, "[XUX]");
+    public EnemyObject(int posX, int posY, Image image) {
+        super(posX, posY, image);
     }
 
-    @Override
-    public void move(int dx, int dy) {
-        super.move(dx, dy);
+    public void enemySideMove(int dx) {
+        this.posX += dx;
+    }
+
+    public void enemyVerticalMove(int dy) {
+        this.posY += dy;
     }
 }
